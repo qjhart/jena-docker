@@ -172,6 +172,13 @@ admin password will be set before you have started Fuseki.
 You can either check the output of the data loading, or later override the
 password using `-e ADMIN_PASSWORD=pw123`.
 
+## add_staging_databases (tdb2 databases)
+
+An additional script `/usr/local/bin/add_staging_databases` can be used to load databases from the staging directory.  The script searches for directories with a `${name}/config.ttl` file.  It uses this configuration to create and load datasets.  The `config.ttl` file is the tdb assembler file.  The databases are created using the directory name, eg `/staging/foo/config.ttl` creates the `foo` database. `/fuseki/configuration/foo.ttl`.  Directories are under the script directory are treated as graphs, and all files in those graph directories are stored to their appropriate graphs, using `tdb2.tdbloader`  In addition, any files ending in `*.sparql-update` are run with the `tdb2.tdbupate` script.  
+
+On any invocation of the image, all config.ttl files are compared.  If they haven't been uploaded, they will be added before the server starts.  
+
+`add_staging_databases` can also be run at any time in an executing docker container, althought they will not be seen until the container is restarted.
 
 ## Recognizing the dataset in Fuseki
 
