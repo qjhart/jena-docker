@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+
+function urlencode() {
+    # urlencode <string>
+    old_lc_collate=$LC_COLLATE
+    LC_COLLATE=C
+
+    local length="${#1}"
+    for (( i = 0; i < length; i++ )); do
+        local c="${1:i:1}"
+        case $c in
+            [a-zA-Z0-9.~_-]) printf "$c" ;;
+            *) printf '%%%02X' "'$c" ;;
+        esac
+    done
+
+    LC_COLLATE=$old_lc_collate
+}
+
+function urldecode() {
+    # urldecode <string>
+
+    local url_encoded="${1//+/ }"
+    printf '%b' "${url_encoded//%/\\x}"
+}
+
+# test configuration file
+function test_ttl() {
+  # Verify name matches
+  for i in $(arq --results=csv --data=$2 \
+                 --query=- <<<'select ?o WHERE {[] <http://jena.apache.org/fuseki#name> ?o}' | tail +2 ); do
+    n=$(echo $i | tr -d  [:cntrl:]);
+    if [[ "$n" != "$1" ]]; then
+      echo "fuseki:name $n is not expected database name: $1"
+      return 1;
+    fi
+  done
+
+  for i in $(arq --results=csv --data=$2 \
+                 --query=- <<<'select ?o WHERE {[] <http://jena.apache.org/2016/tdb#location> ?o}' | tail +2 ); do
+    n=$(echo $i | tr -d  [:cntrl:]);
+    if [[ "$n" != "/fuseki/databases/$1" ]]; then
+      echo "$n is not expected database location"
+      return 1;
+    fi
+  done
+  return 0
+}
+
+for i in $(find /staging/* -maxdepth 1 -type f -name config.ttl); do
+  d=$(dirname $i)
+  db=$(basename $d)
+  config=/fuseki/configuration/$db.ttl
+  if [[ -f $config ]]; then
+    echo "$config exists... skipping"
+  else
+    if ( test_ttl $db $i ) ; then
+      echo "Adding $config"
+      cp $i $config
+      # Add Graph data
+      for g in $(find $d -mindepth 1 -maxdepth 1 -type d); do
+        graph="$(urldecode $(basename $g))"
+        for f in $(find $g -type f -name \*.ttl -o -name \*.n3); do
+          echo tdb2.tdbloader --graph="$graph" --desc=$config  $f
+          tdb2.tdbloader --graph="$graph" --desc=$config  $f
+        done
+      done
+      # Perform update queries
+      for f in $(find $d -type f -name \*.sqarql-update); do
+        echo tdb2.tdbupdate --desc=$config $f
+        tdb2.tdbupdate --desc=$config $f
+      done
+      # Remove any locks
+      find /fuseki/databases/$db -name \*.lock | xargs rm
+    else
+      echo "$i failed testing... skipping"
+    fi
+  fi
+done

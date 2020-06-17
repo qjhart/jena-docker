@@ -13,7 +13,6 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-
 FROM openjdk:11-jre-slim-buster
 MAINTAINER Stian Soiland-Reyes <stain@apache.org>
 
@@ -21,12 +20,12 @@ ENV LANG C.UTF-8
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-       bash curl ca-certificates findutils coreutils pwgen \
+       bash curl ca-certificates findutils coreutils pwgen procps \
     ; \
     rm -rf /var/lib/apt/lists/*
 
 
-# Update below according to https://jena.apache.org/download/ 
+# Update below according to https://jena.apache.org/download/
 # and checksum for apache-jena-3.x.x.tar.gz.sha512
 ENV FUSEKI_SHA512 62ac07f70c65a77fb90127635fa82f719fd5f4f10339c32702ebd664227d78f7414233d69d5b73f25b033f2fdea37b8221ea498755697eea3c1344819e4a527e
 ENV FUSEKI_VERSION 3.14.0
@@ -47,6 +46,8 @@ LABEL org.opencontainers.image.authors "Apache Jena Fuseki by https://jena.apach
 VOLUME /fuseki
 ENV FUSEKI_BASE /fuseki
 
+# Copy jena binaries
+COPY --from=stain/jena:3.14.0 /jena /jena
 
 # Installation folder
 ENV FUSEKI_HOME /jena-fuseki
@@ -66,7 +67,7 @@ RUN     (curl --location --silent --show-error --fail --retry-connrefused --retr
 # Test the install by testing it's ping resource. 20s sleep because Docker Hub.
 RUN  $FUSEKI_HOME/fuseki-server & \
      sleep 20 && \
-     curl -sS --fail 'http://localhost:3030/$/ping' 
+     curl -sS --fail 'http://localhost:3030/$/ping'
 
 # No need to kill Fuseki as our shell will exit after curl
 
@@ -77,16 +78,15 @@ COPY shiro.ini $FUSEKI_HOME/shiro.ini
 COPY docker-entrypoint.sh /
 RUN chmod 755 /docker-entrypoint.sh
 
-
 COPY load.sh $FUSEKI_HOME/
-COPY tdbloader $FUSEKI_HOME/
-RUN chmod 755 $FUSEKI_HOME/load.sh $FUSEKI_HOME/tdbloader
+COPY add_staging_databases /usr/local/bin
+RUN chmod 755 /usr/local/bin/add_staging_databases
+RUN chmod 755 $FUSEKI_HOME/load.sh
 #VOLUME /staging
-
+ENV PATH $PATH:/usr/local/bin:/jena/bin
 
 # Where we start our server from
 WORKDIR $FUSEKI_HOME
 EXPOSE 3030
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["/jena-fuseki/fuseki-server"]
-
